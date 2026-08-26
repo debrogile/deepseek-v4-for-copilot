@@ -32,6 +32,10 @@ const zh: Translations = {
 	'auth.saved': 'API Key 已安全保存。',
 	'auth.removed': 'API Key 已移除。',
 	'auth.notConfigured': 'API Key 未配置，请在命令面板运行 "DeepSeek: 设置 API Key"。',
+	'auth.proxyPrompt': '请输入代理（如 UIS 网关）的 API Key。若留空将使用主 API Key。',
+	'auth.proxyPlaceholder': '代理 API Key',
+	'auth.proxySaved': '代理 API Key 已安全保存。',
+	'auth.proxyRemoved': '代理 API Key 已移除。',
 
 	// Thinking Effort — short labels for model picker dropdown
 	'status.thinking': '思考模式',
@@ -222,6 +226,10 @@ const en: Translations = {
 	'auth.removed': 'DeepSeek API key removed.',
 	'auth.notConfigured':
 		'DeepSeek API key not configured. Run "DeepSeek: Set API Key" from the Command Palette.',
+	'auth.proxyPrompt': 'Enter API key for the proxy (e.g., UIS gateway). Leave empty to use the main API key.',
+	'auth.proxyPlaceholder': 'Proxy API Key',
+	'auth.proxySaved': 'Proxy API key saved.',
+	'auth.proxyRemoved': 'Proxy API key removed.',
 
 	// Thinking Effort
 	'status.thinking': 'Thinking Effort',

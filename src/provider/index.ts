@@ -1,7 +1,7 @@
 import vscode from 'vscode';
 import { AuthManager } from '../auth';
 import { getStabilizeToolListEnabled } from '../config';
-import { MODELS } from '../consts';
+import { getModels } from '../consts';
 import { t } from '../i18n';
 import { logger } from '../logger';
 import { createCacheDiagnosticsRecorder, dumpProviderInput } from './debug';
@@ -89,6 +89,15 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		return this.authManager.hasApiKey();
 	}
 
+	async configureProxyApiKey(): Promise<void> {
+		await this.authManager.promptForProxyApiKey();
+	}
+
+	async clearProxyApiKey(): Promise<void> {
+		await this.authManager.deleteProxyApiKey();
+		vscode.window.showInformationMessage(t('auth.proxyRemoved'));
+	}
+
 	/** Force Copilot Chat to re-query model information (including configurationSchema). */
 	refreshModelPicker(): void {
 		this.onDidChangeLanguageModelChatInformationEmitter.fire();
@@ -136,7 +145,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		if (hasKey) {
 			this.balanceCurrencyResolver.refreshInBackground();
 		}
-		return MODELS.map((model) => toChatInfo(model, hasKey, pricingCurrency));
+		return getModels().map((model) => toChatInfo(model, hasKey, pricingCurrency));
 	}
 
 	async provideLanguageModelChatResponse(

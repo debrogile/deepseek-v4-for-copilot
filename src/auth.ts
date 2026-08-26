@@ -1,10 +1,13 @@
 import vscode from 'vscode';
-import { API_KEY_SECRET } from './consts';
+import { API_KEY_SECRET, PROXY_API_KEY_SECRET } from './consts';
 import { t } from './i18n';
 
 /**
- * Manages DeepSeek API key via VS Code SecretStorage (secure) with
- * fallback to extension settings (less secure, for CI/automation).
+ * Manages DeepSeek API keys via VS Code SecretStorage (secure).
+ *
+ * - **Main API key** (`API_KEY_SECRET`): used for direct-connection models.
+ * - **Proxy API key** (`PROXY_API_KEY_SECRET`): used for proxy-routed models
+ *   (e.g., UIS gateway). Falls back to the main key if not set separately.
  */
 export class AuthManager {
 	private readonly secretStorage: vscode.SecretStorage;
@@ -13,8 +16,10 @@ export class AuthManager {
 		this.secretStorage = context.secrets;
 	}
 
+	// ── Main API key (direct connection) ──
+
 	/**
-	 * Get API key. Tries SecretStorage first, then falls back to settings.
+	 * Get main API key. Tries SecretStorage first, then falls back to settings.
 	 */
 	async getApiKey(): Promise<string | undefined> {
 		const secretKey = await this.secretStorage.get(API_KEY_SECRET);
@@ -31,31 +36,19 @@ export class AuthManager {
 		return undefined;
 	}
 
-	/**
-	 * Store API key in SecretStorage.
-	 */
 	async setApiKey(apiKey: string): Promise<void> {
 		await this.secretStorage.store(API_KEY_SECRET, apiKey.trim());
 	}
 
-	/**
-	 * Delete stored API key.
-	 */
 	async deleteApiKey(): Promise<void> {
 		await this.secretStorage.delete(API_KEY_SECRET);
 	}
 
-	/**
-	 * Check if an API key is configured.
-	 */
 	async hasApiKey(): Promise<boolean> {
 		const key = await this.getApiKey();
 		return key !== undefined && key.length > 0;
 	}
 
-	/**
-	 * Prompt user to enter API key via input box.
-	 */
 	async promptForApiKey(): Promise<boolean> {
 		const apiKey = await vscode.window.showInputBox({
 			prompt: t('auth.prompt'),
@@ -73,6 +66,52 @@ export class AuthManager {
 		if (apiKey) {
 			await this.setApiKey(apiKey);
 			vscode.window.showInformationMessage(t('auth.saved'));
+			return true;
+		}
+
+		return false;
+	}
+
+	// ── Proxy API key ──
+
+	/**
+	 * Get proxy API key. Falls back to the main API key if not set separately.
+	 */
+	async getProxyApiKey(): Promise<string | undefined> {
+		const secretKey = await this.secretStorage.get(PROXY_API_KEY_SECRET);
+		if (secretKey) {
+			return secretKey;
+		}
+
+		// Fallback: use the same key as direct connection
+		return this.getApiKey();
+	}
+
+	async setProxyApiKey(apiKey: string): Promise<void> {
+		await this.secretStorage.store(PROXY_API_KEY_SECRET, apiKey.trim());
+	}
+
+	async deleteProxyApiKey(): Promise<void> {
+		await this.secretStorage.delete(PROXY_API_KEY_SECRET);
+	}
+
+	async promptForProxyApiKey(): Promise<boolean> {
+		const apiKey = await vscode.window.showInputBox({
+			prompt: t('auth.proxyPrompt'),
+			placeHolder: t('auth.proxyPlaceholder'),
+			password: true,
+			ignoreFocusOut: true,
+			validateInput: (value: string) => {
+				if (!value?.trim()) {
+					return t('auth.emptyValidation');
+				}
+				return undefined;
+			},
+		});
+
+		if (apiKey) {
+			await this.setProxyApiKey(apiKey);
+			vscode.window.showInformationMessage(t('auth.proxySaved'));
 			return true;
 		}
 

@@ -2,5 +2,11 @@
   "js/ts.tsdk.path": "node_modules/typescript/lib",
   "editor.codeActionsOnSave": {
     "source.organizeImports": "explicit"
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/out/**": true,
+    "**/.git/**": false  // .git 通常不需要排除，但某些情况下可以设为 true
   }
 }

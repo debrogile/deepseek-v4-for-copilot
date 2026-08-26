@@ -3,27 +3,94 @@ import { CONFIG_SECTION } from './consts';
 
 export type DebugMode = 'minimal' | 'metadata' | 'verbose';
 
+// ──────────────────────────────────────────────
+//  Direct connection (original DeepSeek API)
+// ──────────────────────────────────────────────
+
 /**
  * Get DeepSeek API base URL from settings.
- * Falls back to the official endpoint when not configured.
+ * Controls where **direct-connection** models send requests.
+ * Defaults to the official DeepSeek API endpoint.
  */
 export function getBaseUrl(): string {
 	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
 	return config.get<string>('baseUrl') || 'https://api.deepseek.com';
 }
 
+// ──────────────────────────────────────────────
+//  Proxy configuration
+// ──────────────────────────────────────────────
+
+/** Suffix appended to model IDs for proxy-routed model variants. */
+export const PROXY_MODEL_SUFFIX = '-proxy';
+
+/**
+ * Whether proxy mode is enabled.
+ * When enabled, additional proxy-routed models appear alongside direct models.
+ */
+export function isProxyEnabled(): boolean {
+	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+	return config.get<boolean>('proxyEnabled', false);
+}
+
+/**
+ * Get the proxy display label (e.g. "UIS", "Company Gateway").
+ * Shown in the model picker to distinguish proxy models.
+ */
+export function getProxyLabel(): string {
+	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+	return config.get<string>('proxyLabel', 'Proxy').trim() || 'Proxy';
+}
+
+/**
+ * Get the proxy endpoint base URL.
+ * Returns `undefined` if not configured or proxy is disabled.
+ */
+export function getProxyBaseUrl(): string | undefined {
+	if (!isProxyEnabled()) {
+		return undefined;
+	}
+	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+	const url = config.get<string>('proxyBaseUrl', '').trim();
+	return url || undefined;
+}
+
+/**
+ * Check if a model ID corresponds to a proxy-routed model variant.
+ */
+export function isProxyModel(vscodeModelId: string): boolean {
+	return vscodeModelId.endsWith(PROXY_MODEL_SUFFIX);
+}
+
+/**
+ * Build the proxy variant model ID from a base model ID.
+ * e.g. "deepseek-v4-flash" → "deepseek-v4-flash-proxy"
+ */
+export function toProxyModelId(baseModelId: string): string {
+	return `${baseModelId}${PROXY_MODEL_SUFFIX}`;
+}
+
+/**
+ * Strip proxy suffix to get the base model ID.
+ * e.g. "deepseek-v4-flash-proxy" → "deepseek-v4-flash"
+ * Falls back to the input if not a proxy model.
+ */
+export function fromProxyModelId(proxyModelId: string): string {
+	return proxyModelId.endsWith(PROXY_MODEL_SUFFIX)
+		? proxyModelId.slice(0, -PROXY_MODEL_SUFFIX.length)
+		: proxyModelId;
+}
+
 /**
  * Resolve the API model ID to send to the endpoint.
- *
- * Users can override model IDs via the `modelIdOverrides` setting object
- * (e.g. for third-party API proxies). Falls back to the VS Code model ID
- * when no override is configured.
+ * Strips the proxy suffix, then applies user-defined modelIdOverrides.
  */
 export function getApiModelId(vscodeModelId: string): string {
 	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
 	const overrides = config.get<Record<string, string>>('modelIdOverrides');
-	const override = overrides?.[vscodeModelId]?.trim();
-	return override || vscodeModelId;
+	const baseId = fromProxyModelId(vscodeModelId);
+	const override = overrides?.[baseId]?.trim();
+	return override || baseId;
 }
 
 /**

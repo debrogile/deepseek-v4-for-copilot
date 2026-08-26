@@ -1,14 +1,14 @@
 {
   "name": "deepseek-v4-for-copilot",
   "displayName": "DeepSeek V4 for Copilot Chat",
-  "description": "Pick DeepSeek V4 Pro & Flash from the Copilot Chat model picker. Vision, thinking mode, agent tools — zero config, BYOK.",
+  "description": "DeepSeek V4 Pro & Flash in Copilot Chat with Vision proxy, thinking mode, agent tools, and UIS gateway proxy support.",
   "icon": "resources/icon.png",
   "version": "0.6.2",
-  "publisher": "Vizards",
+  "publisher": "wanghy",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vizards/deepseek-v4-for-copilot"
+    "url": "https://github.com/wanghy/deepseek-v4-for-copilot"
   },
   "engines": {
     "vscode": "^1.116.0",
@@ -59,6 +59,14 @@
       {
         "command": "deepseek-copilot.clearApiKey",
         "title": "%deepseek-copilot.command.clearApiKey%"
+      },
+      {
+        "command": "deepseek-copilot.setProxyApiKey",
+        "title": "%deepseek-copilot.command.setProxyApiKey%"
+      },
+      {
+        "command": "deepseek-copilot.clearProxyApiKey",
+        "title": "%deepseek-copilot.command.clearProxyApiKey%"
       },
       {
         "command": "deepseek-copilot.setVisionModel",
@@ -120,6 +128,21 @@
           "type": "string",
           "default": "https://api.deepseek.com",
           "description": "%deepseek-copilot.config.baseUrl.description%"
+        },
+        "deepseek-copilot.proxyEnabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%deepseek-copilot.config.proxyEnabled.description%"
+        },
+        "deepseek-copilot.proxyLabel": {
+          "type": "string",
+          "default": "Proxy",
+          "description": "%deepseek-copilot.config.proxyLabel.description%"
+        },
+        "deepseek-copilot.proxyBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "%deepseek-copilot.config.proxyBaseUrl.description%"
         },
         "deepseek-copilot.maxTokens": {
           "type": "number",

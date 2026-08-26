@@ -10,6 +10,12 @@ export async function registerProvider(
 	context.subscriptions.push(
 		vscode.commands.registerCommand('deepseek-copilot.setApiKey', () => provider.configureApiKey()),
 		vscode.commands.registerCommand('deepseek-copilot.clearApiKey', () => provider.clearApiKey()),
+		vscode.commands.registerCommand('deepseek-copilot.setProxyApiKey', () =>
+			provider.configureProxyApiKey(),
+		),
+		vscode.commands.registerCommand('deepseek-copilot.clearProxyApiKey', () =>
+			provider.clearProxyApiKey(),
+		),
 		vscode.commands.registerCommand('deepseek-copilot.setVisionModel', () =>
 			provider.setVisionModel(),
 		),

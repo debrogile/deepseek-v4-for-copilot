@@ -2,23 +2,34 @@ import type { CancellationToken } from 'vscode';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
 import type {
-	DeepSeekRequest,
-	DeepSeekStreamChunk,
-	DeepSeekToolCall,
-	DeepSeekUsage,
-	StreamCallbacks,
+    DeepSeekRequest,
+    DeepSeekStreamChunk,
+    DeepSeekToolCall,
+    DeepSeekUsage,
+    StreamCallbacks,
 } from '../types';
 import { createHttpError, formatRequestError, normalizeRequestError } from './error';
 
 /**
  * Lightweight SSE-streaming DeepSeek API client.
  * No external dependencies — uses Node's built-in fetch.
+ *
+ * @param baseUrl  API endpoint base URL.
+ * @param apiKey   API key or token value.
+ * @param useBearerAuth  Whether to prepend "Bearer " to the Authorization header.
+ *                       Set to `false` for proxy gateways that expect a raw token.
+ *                       Defaults to `true` (DeepSeek official API format).
  */
 export class DeepSeekClient {
 	constructor(
 		private readonly baseUrl: string,
 		private readonly apiKey: string,
+		private readonly useBearerAuth: boolean = true,
 	) {}
+
+	private get authHeader(): string {
+		return this.useBearerAuth ? `Bearer ${this.apiKey}` : this.apiKey;
+	}
 
 	/**
 	 * Stream a chat completion from the DeepSeek API.
@@ -48,7 +59,7 @@ export class DeepSeekClient {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					Authorization: `Bearer ${this.apiKey}`,
+					Authorization: this.authHeader,
 				},
 				body: safeStringify(requestBody),
 				signal: controller.signal,
@@ -93,7 +104,23 @@ export class DeepSeekClient {
 						continue;
 					}
 
-					if (trimmed === 'data: [DONE]') {
+					// Normalize SSE "data:" prefix: some gateways omit the space
+					// after the colon (e.g. `data:{"id"}` vs standard `data: {"id"}`).
+					const dataLine = trimmed.startsWith('data:')
+						? (trimmed.startsWith('data: ')
+							? trimmed.slice(6)   // "data: {...}" → slice after "data: "
+							: trimmed.slice(5))  // "data:{...}" → slice after "data:"
+						: undefined;
+
+					if (dataLine === undefined) {
+						continue;
+					}
+
+					// Check for stream end marker
+					const doneMarker = trimmed.startsWith('data: ')
+						? 'data: [DONE]'
+						: 'data:[DONE]';
+					if (trimmed === doneMarker) {
 						// Flush any remaining tool calls
 						for (const tc of pendingToolCalls.values()) {
 							callbacks.onToolCall(tc);
@@ -104,11 +131,7 @@ export class DeepSeekClient {
 						return;
 					}
 
-					if (!trimmed.startsWith('data: ')) {
-						continue;
-					}
-
-					const jsonStr = trimmed.slice(6);
+					const jsonStr = dataLine;
 					try {
 						const chunk: DeepSeekStreamChunk = JSON.parse(jsonStr);
 						const choice = chunk.choices?.[0];

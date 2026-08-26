@@ -1,20 +1,20 @@
 import vscode from 'vscode';
 import { AuthManager } from '../auth';
 import { DeepSeekClient } from '../client';
-import { getApiModelId, getBaseUrl, getMaxTokens } from '../config';
-import { MODELS } from '../consts';
+import { getApiModelId, getBaseUrl, getMaxTokens, getProxyBaseUrl, isProxyModel } from '../config';
+import { getModels } from '../consts';
 import { isOfficialDeepSeekBaseUrl } from '../endpoint';
 import { t } from '../i18n';
 import type { DeepSeekRequest } from '../types';
 import { convertMessages, countMessageChars } from './convert';
 import {
-	dumpDeepSeekRequest,
-	type CacheDiagnosticsRecorder,
-	type CacheDiagnosticsRun,
+    dumpDeepSeekRequest,
+    type CacheDiagnosticsRecorder,
+    type CacheDiagnosticsRun,
 } from './debug';
 import { getConfiguredThinkingEffort, type ModelConfigurationOptions } from './models';
-import { classifyDeepSeekRequest, shouldForceThinkingNone, type RequestKind } from './routing';
 import type { ReplayMarkerMetadata } from './replay';
+import { classifyDeepSeekRequest, shouldForceThinkingNone, type RequestKind } from './routing';
 import type { ConversationSegment } from './segment';
 import { collectTrailingToolResultIds, prepareRequestTools } from './tools/request';
 import { resolveImageMessages, type VisionDescriber } from './vision';
@@ -56,14 +56,20 @@ export async function prepareChatRequest({
 	cacheDiagnostics,
 	getVisionDescriber,
 }: PrepareChatRequestOptions): Promise<PreparedChatRequest> {
-	const apiKey = await authManager.getApiKey();
+	// Determine routing: proxy model → proxy endpoint, direct → base endpoint
+	const isProxy = isProxyModel(modelInfo.id);
+	const baseUrl = isProxy ? (getProxyBaseUrl() ?? getBaseUrl()) : getBaseUrl();
+	const apiKey = isProxy
+		? (await authManager.getProxyApiKey()) ?? (await authManager.getApiKey())
+		: await authManager.getApiKey();
+
 	if (!apiKey) {
 		throw new Error(t('auth.notConfigured'));
 	}
 
-	const baseUrl = getBaseUrl();
-	const client = new DeepSeekClient(baseUrl, apiKey);
-	const modelDef = MODELS.find((m) => m.id === modelInfo.id);
+	// Proxy gateways (UIS etc.) often expect raw token without "Bearer " prefix.
+	const client = new DeepSeekClient(baseUrl, apiKey, !isProxy);
+	const modelDef = getModels().find((m) => m.id === modelInfo.id);
 	const isThinkingModel = modelDef?.capabilities.thinking ?? false;
 	const maxTokens = getMaxTokens();
 

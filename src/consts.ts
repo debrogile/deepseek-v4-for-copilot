@@ -1,3 +1,4 @@
+import { getProxyLabel, isProxyEnabled, toProxyModelId } from './config';
 import { DEEPSEEK_TOOLS_LIMIT } from './provider/tools/consts';
 import type { ModelDefinition } from './types';
 
@@ -36,18 +37,23 @@ export const LANGUAGE_MODEL_CHAT_SYSTEM_ROLE = 3;
 /** SecretStorage key for the DeepSeek API key. */
 export const API_KEY_SECRET = 'deepseek-copilot.apiKey';
 
+/** SecretStorage key for the proxy API key. */
+export const PROXY_API_KEY_SECRET = 'deepseek-copilot.proxy.apiKey';
+
 /** memento key tracking whether the welcome walkthrough has been shown. */
 export const WELCOME_SHOWN_KEY = 'deepseek-copilot.welcomeShown';
 
 // ---- Walkthrough ----
 
 /** Walkthrough contribution ID. */
-export const WALKTHROUGH_ID = 'Vizards.deepseek-v4-for-copilot#deepseekGettingStarted';
+export const WALKTHROUGH_ID = 'wanghy.deepseek-v4-for-copilot#deepseekGettingStarted';
 
-// ---- Model registry ----
+// ──────────────────────────────────────────────
+//  Base model definitions (direct connection)
+// ──────────────────────────────────────────────
 
-/** Available DeepSeek models exposed through the language model provider. */
-export const MODELS: ModelDefinition[] = [
+/** Built-in base models that connect directly to DeepSeek API. */
+const BASE_MODELS: ModelDefinition[] = [
 	{
 		id: 'deepseek-v4-flash',
 		name: 'DeepSeek V4 Flash',
@@ -89,3 +95,56 @@ export const MODELS: ModelDefinition[] = [
 		priceCategory: 'low',
 	},
 ];
+
+// ──────────────────────────────────────────────
+//  Proxy model variants
+// ──────────────────────────────────────────────
+
+/**
+ * Build proxy-routed model definitions from base models.
+ * These use `-proxy` suffixed IDs and are labeled with the proxy name
+ * so users can distinguish them in the model picker.
+ */
+function buildProxyModels(): ModelDefinition[] {
+	const label = getProxyLabel();
+	return BASE_MODELS.map((base) => ({
+		...base,
+		id: toProxyModelId(base.id),
+		name: `${base.name} (${label})`,
+		detail: `通过 ${label} 代理转发`,
+		// Proxy endpoints (UIS gateways etc.) typically don't support
+		// DeepSeek-specific parameters like `thinking` / `reasoning_effort`.
+		capabilities: {
+			...base.capabilities,
+			thinking: false,
+		},
+		requiresThinkingParam: false,
+	}));
+}
+
+// ──────────────────────────────────────────────
+//  Model resolution
+// ──────────────────────────────────────────────
+
+/**
+ * Get all models to show in the model picker.
+ *
+ * - **Base models** (`deepseek-v4-flash`, `deepseek-v4-pro`) are always available.
+ * - **Proxy models** (`deepseek-v4-flash-proxy`, `deepseek-v4-pro-proxy`) are added
+ *   when `deepseek-copilot.proxyEnabled` is true.
+ *
+ * Both sets coexist, letting the user freely choose per conversation.
+ */
+export function getModels(): ModelDefinition[] {
+	const models = [...BASE_MODELS];
+	if (isProxyEnabled()) {
+		models.push(...buildProxyModels());
+	}
+	return models;
+}
+
+/**
+ * Only the base (direct-connection) models.
+ * Used for replay marker prefixes and other non-picker lookups.
+ */
+export const MODELS: ModelDefinition[] = BASE_MODELS;
