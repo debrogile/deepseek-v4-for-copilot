@@ -9,6 +9,24 @@ import type {
 import { parseFirstReplayMarker } from './replay';
 
 /**
+ * Placeholder used when an assistant message must carry `reasoning_content` but the original
+ * reasoning text can no longer be recovered from the VS Code message history.
+ *
+ * DeepSeek rejects thinking-mode requests (HTTP 400, "The reasoning_content in the thinking
+ * mode must be passed back to the API.") when such a message has a missing **or empty**
+ * `reasoning_content`, so the field must always be non-empty while thinking is enabled.
+ * Reasoning becomes unrecoverable whenever the history holds an assistant turn that was
+ * produced without a replay marker or thinking part — a model switch inside the same
+ * conversation, history compaction/summarization, or turns restored from an older build.
+ */
+export const EMPTY_REASONING_PLACEHOLDER = '(prior reasoning unavailable)';
+
+export interface ConvertMessagesStats {
+	/** Assistant messages whose reasoning fell back to {@link EMPTY_REASONING_PLACEHOLDER}. */
+	emptyReasoningFallbacks: number;
+}
+
+/**
  * Convert VS Code chat messages to DeepSeek format.
  * Injects marker-replayed reasoning_content for assistant messages.
  */
@@ -16,6 +34,7 @@ export function convertMessages(
 	messages: readonly vscode.LanguageModelChatRequestMessage[],
 	isThinkingModel: boolean,
 	nativeImageInput: boolean,
+	stats?: ConvertMessagesStats,
 ): DeepSeekMessage[] {
 	const result: DeepSeekMessage[] = [];
 
@@ -82,7 +101,17 @@ export function convertMessages(
 				}
 
 				if (isThinkingModel) {
-					msg.reasoning_content = getReasoningContent(replayMarker, thinkingContent);
+					const reasoningContent = getReasoningContent(replayMarker, thinkingContent);
+					if (reasoningContent.length > 0) {
+						msg.reasoning_content = reasoningContent;
+					} else {
+						// Never send an empty reasoning_content: DeepSeek treats it as missing and
+						// rejects the whole request while thinking is enabled.
+						msg.reasoning_content = EMPTY_REASONING_PLACEHOLDER;
+						if (stats) {
+							stats.emptyReasoningFallbacks += 1;
+						}
+					}
 				}
 
 				result.push(msg);
@@ -122,6 +151,28 @@ function toImageDataUrl(part: vscode.LanguageModelDataPart): string {
 	return `data:${part.mimeType};base64,${Buffer.from(part.data).toString('base64')}`;
 }
 
+/**
+ * Drop `reasoning_content` from converted messages.
+ *
+ * Used when thinking ended up disabled for the request: the API ignores the field then, and
+ * streaming it costs payload size (and prefix-cache stability) for no benefit.
+ */
+export function stripReasoningContent(messages: DeepSeekMessage[]): void {
+	for (const message of messages) {
+		if (message.role === 'assistant') {
+			delete message.reasoning_content;
+		}
+	}
+}
+
+/**
+ * Resolve the reasoning text to send back for one assistant message.
+ *
+ * The replay marker wins because it preserves the original text across reloads and
+ * compaction; the live thinking part is the fallback for the current turn. Callers must
+ * substitute a non-empty placeholder when this returns an empty string (see
+ * `EMPTY_REASONING_PLACEHOLDER`).
+ */
 function getReasoningContent(
 	replayMarker: ReturnType<typeof parseFirstReplayMarker>,
 	thinkingContent: string,

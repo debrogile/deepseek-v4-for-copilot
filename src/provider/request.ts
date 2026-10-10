@@ -5,8 +5,14 @@ import { getApiModelId, getBaseUrl, getMaxTokens, getProxyBaseUrl, isProxyModel 
 import { getModels } from '../consts';
 import { isOfficialDeepSeekBaseUrl } from '../endpoint';
 import { t } from '../i18n';
+import { logger } from '../logger';
 import type { DeepSeekMessage, DeepSeekRequest } from '../types';
-import { convertMessages, countMessageChars } from './convert';
+import {
+	convertMessages,
+	countMessageChars,
+	stripReasoningContent,
+	type ConvertMessagesStats,
+} from './convert';
 import {
     dumpDeepSeekRequest,
     type CacheDiagnosticsRecorder,
@@ -85,7 +91,13 @@ export async function prepareChatRequest({
 
 	const resolvedMessages = visionResolution.messages;
 
-	const deepseekMessages = convertMessages(resolvedMessages, isThinkingModel, nativeImageInput);
+	const convertStats: ConvertMessagesStats = { emptyReasoningFallbacks: 0 };
+	const deepseekMessages = convertMessages(
+		resolvedMessages,
+		isThinkingModel,
+		nativeImageInput,
+		convertStats,
+	);
 	if (nativeImageInput) {
 		// For native-image models, count images after conversion so diagnostics reflect
 		// what is actually forwarded in the DeepSeek payload.
@@ -97,7 +109,6 @@ export async function prepareChatRequest({
 	}
 	const tools = prepareRequestTools(modelDef?.capabilities.toolCalling, options);
 
-	const totalRequestChars = countMessageChars(deepseekMessages);
 	const hasNativeImages = hasNativeImageParts(deepseekMessages);
 	const baseRequest: DeepSeekRequest = {
 		model: getApiModelId(modelInfo.id),
@@ -119,6 +130,17 @@ export async function prepareChatRequest({
 	const forceNoneThinking =
 		shouldForceThinkingNone(requestKind) && isOfficialDeepSeekBaseUrl(baseUrl);
 	const thinkingEffort = forceNoneThinking ? 'none' : configuredThinkingEffort;
+	if (thinkingEffort === 'none') {
+		// Thinking is disabled for this request, so the API no longer expects reasoning to be
+		// passed back; drop the field instead of shipping placeholder text.
+		stripReasoningContent(deepseekMessages);
+	} else if (convertStats.emptyReasoningFallbacks > 0) {
+		logger.warn(
+			`Recovered ${convertStats.emptyReasoningFallbacks} assistant message(s) whose reasoning text was no longer available; sent a placeholder so DeepSeek accepts the thinking-mode history.`,
+		);
+	}
+	// Counted after the strip above so the reported size matches the payload actually sent.
+	const totalRequestChars = countMessageChars(deepseekMessages);
 	const request: DeepSeekRequest = {
 		...baseRequest,
 		...(isThinkingModel
